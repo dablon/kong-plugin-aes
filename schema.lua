@@ -1,14 +1,10 @@
-local typedefs = require "kong.db.schema.typedefs"
-
 return {
-  name = "aes-encryption",
+  name = "aes-crypto",
   fields = {
-    {
-      config = {
+    { config = {
         type = "record",
         fields = {
-          { aes_key = { type = "string", required = true } },
-          { aes_iv = { type = "string", required = true } },
+          { encryption_key = { type = "string", required = true } },
         },
       },
     },
