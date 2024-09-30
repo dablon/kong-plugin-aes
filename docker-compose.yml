@@ -37,6 +37,7 @@ services:
       KONG_DATABASE: postgres
       KONG_PG_HOST: kong-database
       KONG_PG_PASSWORD: kong
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
       KONG_PLUGINS: bundled,aes-encryption
     ports:
       - "8000:8000"  # Proxy (HTTP)
@@ -52,6 +53,12 @@ services:
     image: pantsel/konga:latest
     environment:
       DB_ADAPTER: postgres
+      KONGA_DEFAULT_ADMIN_CONNECTION: http://kong:8001
+      KONG_ADMIN_URL: http://kong:8001
+      KONGA_HOOK_TIMEOUT: 60000
+      KONGA_LOG_LEVEL: warn
+      KONGA_SEED_USER_DATA_SOURCE: kong
+      KONGA_SEED_KONG_NODE_DATA_SOURCE: http://kong:8001
       DB_HOST: kong-database
       DB_USER: kong
       DB_PASSWORD: kong
