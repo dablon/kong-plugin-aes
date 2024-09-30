@@ -81,21 +81,27 @@ El plugin se configura a través de la API de Kong. Los parámetros de configura
 
 ```mermaid
 sequenceDiagram
-    participant C as Cliente
-    participant K as Kong
-    participant P as Plugin AES
-    participant S as Servicio
+    participant Cliente Web as "Cliente Web"
+    participant Kong as "Kong"
+    participant Servicio Interno as "Servicio Interno"
 
-    Note over C,K: El cliente envía una solicitud HTTP
-    C->>K: Solicitud HTTP
-    K->>P: Solicitud HTTP
-    P->>P: Cifrado de la solicitud
-    P->>S: Solicitud cifrada
-    S->>S: Procesamiento de la solicitud
-    S->>P: Respuesta
-    P->>P: Descifrado de la respuesta
-    P->>K: Respuesta descifrada
-    K->>C: Respuesta HTTP
+    Note over Cliente Web,Kong: Encriptación de datos sensibles
+    Cliente Web->>Kong: Enviar datos encriptados (AES)
+
+    Note over Kong: Desencriptación de datos
+    Kong->>Kong: Desencriptar datos (lua-openssl)
+
+    Note over Kong,Servicio Interno: Proxy con datos desencriptados
+    Kong->>Servicio Interno: Enviar datos desencriptados
+
+    Note over Servicio Interno: Procesar datos
+    Servicio Interno->>Servicio Interno: Procesar datos
+
+    Note over Servicio Interno,Kong: Respuesta
+    Servicio Interno->>Kong: Enviar respuesta
+
+    Note over Kong,Cliente Web: Enviar respuesta encriptada
+    Kong->>Cliente Web: Enviar respuesta encriptada (AES)
 ```
 
 
