@@ -22,29 +22,54 @@ make_request() {
     local description=$5
 
     echo "Testing: $description"
-    response=$(curl -s -X $method -H "Content-Type: application/json" -d "$data" -w "%{http_code}" $url)
-    status_code=${response: -3}
-    body=${response:0:${#response}-3}
+    echo "URL: $url"
+    echo "Method: $method"
+    echo "Data: $data"
+    
+    response=$(curl -s -X $method -H "Content-Type: application/json" -d "$data" -w "\n%{http_code}" $url)
+    status_code=$(echo "$response" | tail -n1)
+    body=$(echo "$response" | sed '$d')
+
+    echo "Status code: $status_code"
 
     if [ "$status_code" == "$expected_status" ]; then
         echo -e "${GREEN}Test passed${NC}"
     else
         echo -e "${RED}Test failed. Expected status $expected_status, got $status_code${NC}"
+        echo "Response body: $body"
     fi
-    echo "Response body: $body"
     echo
+
 }
+
+# Test Kong connectivity
+echo "Testing Kong connectivity"
+make_request "$KONG_ADMIN_URL" "GET" "" "200" "Kong Admin API"
 
 # Test Kong service with AES encryption plugin
 echo "Testing Kong service with AES encryption plugin"
-make_request "$KONG_PROXY_URL/$SERVICE_ROUTE/encrypt" "POST" '{"data":"test message"}' "200" "Encrypt data through Kong"
-make_request "$KONG_PROXY_URL/$SERVICE_ROUTE/decrypt" "POST" '{"encryptedData":"encrypted_data_from_previous_response"}' "200" "Decrypt data through Kong"
+encrypted_data=$(make_request "$KONG_PROXY_URL/$SERVICE_ROUTE/encrypt" "POST" '{"data":"test message"}' "200" "Encrypt data through Kong")
+if [ ! -z "$encrypted_data" ]; then
+    encrypted_value=$(echo "$encrypted_data" | jq -r '.encrypted // empty' 2>/dev/null)
+    if [ ! -z "$encrypted_value" ]; then
+        make_request "$KONG_PROXY_URL/$SERVICE_ROUTE/decrypt" "POST" "{\"encryptedData\":\"$encrypted_value\"}" "200" "Decrypt data through Kong"
+    else
+        echo "Failed to extract encrypted value from response"
+    fi
+else
+    echo "No data received from encryption request"
+fi
 make_request "$KONG_PROXY_URL/$SERVICE_ROUTE/echo" "POST" '{"message":"test echo"}' "200" "Echo request through Kong"
 
 # Test internal Node.js service directly
 echo "Testing internal Node.js service directly"
-make_request "$NODE_SERVICE_URL/encrypt" "POST" "{\"data\":\"test message\",\"key\":\"$ENCRYPTION_KEY\",\"iv\":\"$ENCRYPTION_IV\"}" "200" "Encrypt data directly"
-make_request "$NODE_SERVICE_URL/decrypt" "POST" "{\"encryptedData\":\"encrypted_data_from_previous_response\",\"key\":\"$ENCRYPTION_KEY\",\"iv\":\"$ENCRYPTION_IV\"}" "200" "Decrypt data directly"
+encrypted_data=$(make_request "$NODE_SERVICE_URL/encrypt" "POST" "{\"data\":\"test message\",\"key\":\"$ENCRYPTION_KEY\",\"iv\":\"$ENCRYPTION_IV\"}" "200" "Encrypt data directly")
+encrypted_value=$(echo "$encrypted_data" | jq -r '.encrypted // empty' 2>/dev/null)
+if [ ! -z "$encrypted_value" ]; then
+    make_request "$NODE_SERVICE_URL/decrypt" "POST" "{\"encryptedData\":\"$encrypted_value\",\"key\":\"$ENCRYPTION_KEY\",\"iv\":\"$ENCRYPTION_IV\"}" "200" "Decrypt data directly"
+else
+    echo "Failed to extract encrypted value from response"
+fi
 make_request "$NODE_SERVICE_URL/echo" "POST" '{"message":"test echo"}' "200" "Echo request directly"
 
 # Additional test cases
