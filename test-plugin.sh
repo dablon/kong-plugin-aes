@@ -31,10 +31,10 @@ print_header() {
 }
 
 # Function to print sub-headers
-
 print_subheader() {
     echo -e "\n${BOLD}${CYAN}$1${NC}"
 }
+
 # Function to make a request and check the response
 make_request() {
     local url=$1
@@ -104,7 +104,7 @@ make_request_with_error_handling() {
 }
 
 # Main execution
-print_header "Kong Integration Test Suite"
+print_header "Enhanced Kong Integration Test Suite"
 
 print_subheader "1. Kong Connectivity"
 make_request "$KONG_ADMIN_URL" "GET" "" "200" "Kong Admin API"
@@ -117,7 +117,13 @@ make_request "$KONG_ADMIN_URL/services/$SERVICE_NAME_WITHOUT_PLUGIN" "GET" "" "2
 make_request "$KONG_ADMIN_URL/routes/$ROUTE_NAME_WITH_PLUGIN" "GET" "" "200" "Get route details (with plugin)"
 make_request "$KONG_ADMIN_URL/routes/$ROUTE_NAME_WITHOUT_PLUGIN" "GET" "" "200" "Get route details (without plugin)"
 
-print_subheader "3. Kong Service with AES Encryption Plugin"
+print_subheader "3. Plugin Configuration Checks"
+make_request "$KONG_ADMIN_URL/plugins" "GET" "" "200" "List all plugins"
+make_request "$KONG_ADMIN_URL/plugins/$PLUGIN_NAME" "GET" "" "200" "Get specific plugin details"
+make_request "$KONG_ADMIN_URL/services/$SERVICE_NAME_WITH_PLUGIN/plugins" "GET" "" "200" "List plugins for service with plugin"
+make_request "$KONG_ADMIN_URL/plugins?name=aes-encryption" "GET" "" "200" "Check for AES encryption plugin"
+
+print_subheader "4. Kong Service with AES Encryption Plugin"
 
 # Test connectivity to the Kong Proxy
 echo -e "${YELLOW}Testing connectivity to Kong Proxy${NC}"
@@ -146,24 +152,12 @@ fi
 # Test echo endpoint
 make_request_with_error_handling "$KONG_PROXY_URL/$SERVICE_ROUTE_WITH_PLUGIN/echo" "POST" '{"message":"test echo"}' "200" "Echo request through Kong (with plugin)"
 
-# Test plugin configuration
-echo -e "${YELLOW}Testing plugin configuration${NC}"
-plugin_config=$(curl -s $KONG_ADMIN_URL/plugins/$PLUGIN_NAME)
-echo -e "${YELLOW}Plugin configuration:${NC} $plugin_config"
-if [[ $plugin_config == *"$SERVICE_NAME_WITH_PLUGIN"* ]]; then
-    echo -e "${GREEN}✔ Plugin is correctly associated with the service${NC}"
-else
-    echo -e "${RED}✘ Plugin is not correctly associated with the service${NC}"
-fi
-
-echo -e "${MAGENTA}------------------------${NC}"
-
-print_subheader "4. Kong Service without Plugin"
+print_subheader "5. Kong Service without Plugin"
 make_request "$KONG_PROXY_URL/$SERVICE_ROUTE_WITHOUT_PLUGIN/encrypt" "POST" '{"data":"test message"}' "200" "Encrypt data through Kong (without plugin)"
 make_request "$KONG_PROXY_URL/$SERVICE_ROUTE_WITHOUT_PLUGIN/decrypt" "POST" '{"encryptedData":"81aee295f1a2a221e6554649ea21a45c"}' "200" "Decrypt data through Kong (without plugin)"
 make_request "$KONG_PROXY_URL/$SERVICE_ROUTE_WITHOUT_PLUGIN/echo" "POST" '{"message":"test echo"}' "200" "Echo request through Kong (without plugin)"
 
-print_subheader "5. Internal Node.js Service Direct Testing"
+print_subheader "6. Internal Node.js Service Direct Testing"
 encrypted_data=$(make_request "$NODE_SERVICE_URL/encrypt" "POST" "{\"data\":\"test message\",\"key\":\"$ENCRYPTION_KEY\",\"iv\":\"$ENCRYPTION_IV\"}" "200" "Encrypt data directly")
 encrypted_value=$(echo "$encrypted_data" | jq -r '.encrypted // empty' 2>/dev/null)
 if [ ! -z "$encrypted_value" ]; then
@@ -173,17 +167,32 @@ else
 fi
 make_request "$NODE_SERVICE_URL/echo" "POST" '{"message":"test echo"}' "200" "Echo request directly"
 
-print_subheader "6. Additional Test Cases"
+print_subheader "7. Additional Test Cases"
 make_request "$KONG_PROXY_URL/$SERVICE_ROUTE_WITH_PLUGIN/encrypt" "POST" '{"data":""}' "400" "Encrypt empty data through Kong (with plugin)"
-
 make_request "$KONG_PROXY_URL/$SERVICE_ROUTE_WITHOUT_PLUGIN/encrypt" "POST" '{"data":""}' "400" "Encrypt empty data through Kong (without plugin)"
 make_request "$NODE_SERVICE_URL/encrypt" "POST" '{"data":""}' "400" "Encrypt empty data directly"
 make_request "$KONG_PROXY_URL/$SERVICE_ROUTE_WITH_PLUGIN/decrypt" "POST" '{"encryptedData":"invalid_data"}' "500" "Decrypt invalid data through Kong (with plugin)"
 make_request "$KONG_PROXY_URL/$SERVICE_ROUTE_WITHOUT_PLUGIN/decrypt" "POST" '{"encryptedData":"invalid_data"}' "500" "Decrypt invalid data through Kong (without plugin)"
 make_request "$NODE_SERVICE_URL/decrypt" "POST" '{"encryptedData":"invalid_data"}' "500" "Decrypt invalid data directly"
 
-print_subheader "7. Plugin Configuration"
-make_request "$KONG_ADMIN_URL/plugins" "GET" "" "200" "List all plugins"
-make_request "$KONG_ADMIN_URL/plugins/$PLUGIN_NAME" "GET" "" "200" "Get plugin details"
+print_subheader "8. Plugin Configuration Verification"
+plugin_config=$(curl -s $KONG_ADMIN_URL/plugins/$PLUGIN_NAME)
+echo -e "${YELLOW}Plugin configuration:${NC} $plugin_config"
+if [[ $plugin_config == *"$SERVICE_NAME_WITH_PLUGIN"* ]]; then
+    echo -e "${GREEN}✔ Plugin is correctly associated with the service${NC}"
+else
+    echo -e "${RED}✘ Plugin is not correctly associated with the service${NC}"
+fi
 
-print_header "Test Suite Completed"
+# Check if the plugin is enabled and configured correctly
+echo -e "\n${YELLOW}Checking plugin configuration:${NC}"
+curl -s $KONG_ADMIN_URL/plugins/$PLUGIN_NAME | grep -E "config.*(encryption_key|iv)"
+
+print_header "Enhanced Test Suite Completed"
+
+echo -e "\n${YELLOW}Diagnostic Information:${NC}"
+echo "1. Verify that the AES encryption plugin is installed and enabled in Kong."
+echo "2. Check if the plugin is correctly associated with the '$SERVICE_NAME_WITH_PLUGIN' service."
+echo "3. Ensure that the encryption key and IV in the plugin configuration match the ones used in the tests."
+echo "4. Verify that the Node.js service is correctly implementing the encryption and decryption endpoints."
+echo "5. Check Kong logs for any error messages related to the plugin or service."
